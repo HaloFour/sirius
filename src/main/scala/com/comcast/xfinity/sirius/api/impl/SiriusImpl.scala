@@ -16,20 +16,20 @@
 package com.comcast.xfinity.sirius.api.impl
 
 import compat.AkkaFutureAdapter
-import com.comcast.xfinity.sirius.api.RequestHandler
-import com.comcast.xfinity.sirius.api.Sirius
+import com.comcast.xfinity.sirius.api._
 import akka.pattern.ask
 import membership.MembershipActor._
-import com.comcast.xfinity.sirius.api.SiriusResult
 import akka.actor._
-import java.util.concurrent.Future
+
 import com.comcast.xfinity.sirius.writeaheadlog.SiriusLog
-import com.comcast.xfinity.sirius.api.SiriusConfiguration
+
 import scala.concurrent.{Await, Future => AkkaFuture}
 import akka.util.Timeout
+
 import scala.concurrent.duration._
 import status.NodeStats.FullNodeStatus
 import status.StatusWorker._
+
 import scala.util.Try
 
 object SiriusImpl {
@@ -92,7 +92,7 @@ class SiriusImpl(config: SiriusConfiguration, supProps: Props)(implicit val acto
   /**
    * @inheritdoc
    */
-  def enqueueGet(key: String): Future[SiriusResult] = {
+  def enqueueGet(key: String): SiriusFuture[SiriusResult] = {
     val akkaFuture = (supervisor ? Get(key)).asInstanceOf[AkkaFuture[SiriusResult]]
     new AkkaFutureAdapter(akkaFuture)
   }
@@ -100,7 +100,7 @@ class SiriusImpl(config: SiriusConfiguration, supProps: Props)(implicit val acto
   /**
    * @inheritdoc
    */
-  def enqueuePut(key: String, body: Array[Byte]): Future[SiriusResult] = {
+  def enqueuePut(key: String, body: Array[Byte]): SiriusFuture[SiriusResult] = {
     //XXX: this will always return a Sirius.None as soon as Ordering is complete
     val akkaFuture = (supervisor ? Put(key, body)).asInstanceOf[AkkaFuture[SiriusResult]]
     new AkkaFutureAdapter(akkaFuture)
@@ -109,7 +109,7 @@ class SiriusImpl(config: SiriusConfiguration, supProps: Props)(implicit val acto
   /**
    * @inheritdoc
    */
-  def enqueueDelete(key: String): Future[SiriusResult] = {
+  def enqueueDelete(key: String): SiriusFuture[SiriusResult] = {
     val akkaFuture = (supervisor ? Delete(key)).asInstanceOf[AkkaFuture[SiriusResult]]
     new AkkaFutureAdapter(akkaFuture)
   }
@@ -118,7 +118,7 @@ class SiriusImpl(config: SiriusConfiguration, supProps: Props)(implicit val acto
    * Get this nodes status, included in the result are the nodes address,
    * configuration, and value of any monitors, if configured
    */
-  def getStatus: Future[FullNodeStatus] = {
+  def getStatus: SiriusFuture[FullNodeStatus] = {
     val akkaFuture = (supervisor ? GetStatus).asInstanceOf[AkkaFuture[FullNodeStatus]]
     new AkkaFutureAdapter(akkaFuture)
   }

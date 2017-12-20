@@ -1,5 +1,5 @@
 /*
- *  Copyright 2012-2014 Comcast Cable Communications Management, LLC
+ *  Copyright 2012-2017 Comcast Cable Communications Management, LLC
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -15,27 +15,9 @@
  */
 package com.comcast.xfinity.sirius.api
 
-trait Sirius {
-  
-  /**
-   * Enqueue a GET for processing
-   */
-  def enqueueGet(key: String): SiriusFuture[SiriusResult]
-  
-  /**
-   * Enqueue a PUT for processing
-   */
-  def enqueuePut(key: String, body: Array[Byte]): SiriusFuture[SiriusResult]
+import java.util.concurrent.{Executor, Future}
 
-  /**
-   * Enqueue a DELETE for processing
-   */
-  def enqueueDelete(key: String): SiriusFuture[SiriusResult]
-
-  /**
-   * Is the system ready to handle requests?
-   *
-   * @return true if so, false if not
-   */
-  def isOnline: Boolean
+trait SiriusFuture[T] extends Future[T] {
+    def addListener(runnable: Runnable)
+    def addListener(runnable: Runnable, executor: Executor)
 }

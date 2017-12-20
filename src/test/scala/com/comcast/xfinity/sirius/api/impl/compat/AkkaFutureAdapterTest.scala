@@ -15,14 +15,20 @@
  */
 package com.comcast.xfinity.sirius.api.impl.compat
 
-import com.comcast.xfinity.sirius.NiceTest
 import org.scalatest.BeforeAndAfterAll
-import scala.concurrent.{ExecutionContext, Future => AkkaFuture}
-import akka.dispatch.ExecutionContexts._
+
+import scala.concurrent.{Await, Future => AkkaFuture}
 import akka.actor.ActorSystem
 import java.io.IOException
-import java.util.concurrent.{ExecutionException, TimeUnit, TimeoutException}
+import java.util.concurrent.{ExecutionException, Executor, TimeUnit, TimeoutException}
+
 import akka.dispatch.ExecutionContexts
+import akka.util.Timeout
+import com.comcast.xfinity.sirius.NiceTest
+
+import scala.concurrent.duration._
+import org.mockito.Mockito.{never, timeout, verify}
+import org.mockito.Matchers.any
 
 class AkkaFutureAdapterTest extends NiceTest with BeforeAndAfterAll {
 
@@ -30,8 +36,7 @@ class AkkaFutureAdapterTest extends NiceTest with BeforeAndAfterAll {
   implicit val ec = ExecutionContexts.global()
 
   override def afterAll {
-    as.shutdown()
-    as.awaitTermination()
+    Await.result(as.terminate, Duration.Inf)
   }
 
   describe("AkkaFutureAdapter") {
@@ -47,6 +52,90 @@ class AkkaFutureAdapterTest extends NiceTest with BeforeAndAfterAll {
         val akkaFuture = AkkaFuture { "foo" }
         new AkkaFutureAdapter[String](akkaFuture).get(2, TimeUnit.SECONDS)
       }
+    }
+
+    it("must invoke Runnable callback when already done") {
+      val akkaFuture = AkkaFuture.successful("foo")
+      val runnable = mock[Runnable]
+      val adapter = new AkkaFutureAdapter[String](akkaFuture)
+      adapter.addListener(runnable)
+      verify(runnable, timeout(100).times(1)).run()
+      assert(adapter.isDone)
+    }
+
+    it("must invoke Runnable callback when already failed") {
+      val akkaFuture = AkkaFuture.failed(new Exception("FAILED"))
+      val runnable = mock[Runnable]
+      val adapter = new AkkaFutureAdapter[String](akkaFuture)
+      adapter.addListener(runnable)
+      verify(runnable, timeout(100).times(1)).run()
+      assert(adapter.isDone)
+    }
+
+    it("must invoke Runnable callback when already done on provided Executor") {
+      val akkaFuture = AkkaFuture.successful("foo")
+      val runnable = mock[Runnable]
+      val executor = mock[Executor]
+      val adapter = new AkkaFutureAdapter[String](akkaFuture)
+      adapter.addListener(runnable, executor)
+      verify(executor, timeout(100).times(1)).execute(any[Runnable])
+      assert(adapter.isDone)
+    }
+
+    it("must invoke Runnable callback when already failed on provided Executor") {
+      val akkaFuture = AkkaFuture.failed(new Exception("FAILED"))
+      val runnable = mock[Runnable]
+      val executor = mock[Executor]
+      val adapter = new AkkaFutureAdapter[String](akkaFuture)
+      adapter.addListener(runnable, executor)
+      verify(executor, timeout(100).times(1)).execute(any[Runnable])
+      assert(adapter.isDone)
+    }
+
+    it("must invoke Runnable callback when eventually done") {
+      val akkaFuture = AkkaFuture { Thread.sleep(500); "foo" }
+      val runnable = mock[Runnable]
+      val adapter = new AkkaFutureAdapter[String](akkaFuture)
+      adapter.addListener(runnable)
+      verify(runnable, never()).run()
+      Await.ready(akkaFuture, Timeout(1 second).duration)
+      verify(runnable, timeout(100).times(1)).run()
+      assert(adapter.isDone)
+    }
+
+    it("must invoke Runnable callback when eventually failed") {
+      val akkaFuture = AkkaFuture { Thread.sleep(500); throw new Exception("FAILED") }
+      val runnable = mock[Runnable]
+      val adapter = new AkkaFutureAdapter[String](akkaFuture)
+      adapter.addListener(runnable)
+      verify(runnable, never()).run()
+      Await.ready(akkaFuture, Timeout(1 second).duration)
+      verify(runnable, timeout(100).times(1)).run()
+      assert(adapter.isDone)
+    }
+
+    it("must invoke Runnable callback when eventually done on provided Executor") {
+      val akkaFuture = AkkaFuture { Thread.sleep(500); "foo" }
+      val runnable = mock[Runnable]
+      val executor = mock[Executor]
+      val adapter = new AkkaFutureAdapter[String](akkaFuture)
+      adapter.addListener(runnable, executor)
+      verify(executor, never()).execute(any[Runnable])
+      Await.ready(akkaFuture, Timeout(1 second).duration)
+      verify(executor, timeout(100).times(1)).execute(any[Runnable])
+      assert(adapter.isDone)
+    }
+
+    it("must invoke Runnable callback when eventually failed on provided Executor") {
+      val akkaFuture = AkkaFuture { Thread.sleep(500); throw new Exception("FAILED") }
+      val runnable = mock[Runnable]
+      val executor = mock[Executor]
+      val adapter = new AkkaFutureAdapter[String](akkaFuture)
+      adapter.addListener(runnable, executor)
+      verify(executor, never()).execute(any[Runnable])
+      Await.ready(akkaFuture, Timeout(1 second).duration)
+      verify(executor, timeout(100).times(1)).execute(any[Runnable])
+      assert(adapter.isDone)
     }
 
     it("must throw a TimeoutException if it takes too long") {
