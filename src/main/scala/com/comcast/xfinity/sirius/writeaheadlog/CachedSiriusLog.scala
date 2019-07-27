@@ -108,9 +108,19 @@ class CachedSiriusLog(log: SiriusLog, maxCacheSize: Int) extends SiriusLog {
    * @param acc0     initial accumulator value
    * @param foldFun  function to apply to the log entry, the result being the new accumulator
    */
-  override def foldLeftLimit[T](startSeq: Long, limit: Int)(acc0: T)(foldFun: (T, OrderedEvent) => T): T = {
-    log.foldLeftLimit(startSeq, limit)(acc0)(foldFun)
-  }
+  override def foldLeftLimit[T](startSeq: Long, limit: Int)(acc0: T)(foldFun: (T, OrderedEvent) => T): T =
+    startSeq match {
+      case start if firstSeq <= start && start <= lastSeq =>
+        writeCache.synchronized {
+          writeCache.subMap(start, true, lastSeq, true).foldLeft((0, 0L, acc0)) {
+            case ((count, _, acc), (_, evt)) => (count + 1, evt.sequence, foldFun(acc, evt))
+          }
+        } match {
+          case (count, lastSeq, acc) if count < limit => log.foldLeftLimit(lastSeq + 1, limit - count)(acc)(foldFun)
+          case (_, _, acc) => acc
+        }
+      case _ => log.foldLeftLimit(startSeq, limit)(acc0)(foldFun)
+    }
 
   /**
    * Private inner version of fold left.  This one hits the cache, and assumes that start/endSeqs are
