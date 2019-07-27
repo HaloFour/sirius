@@ -2,10 +2,12 @@
 .cache
 .classpath
 .project
+.history
 .settings/
 .springBeans
 target/
 .idea/
+.metals/
 *.iml
 *.ipr
 *.iws
