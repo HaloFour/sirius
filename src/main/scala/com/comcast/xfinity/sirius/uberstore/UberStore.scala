@@ -82,6 +82,13 @@ class UberStore private[uberstore] (baseDir: String, uberpair: UberPair) extends
   def foldLeftRange[T](startSeq: Long, endSeq: Long)(acc0: T)(foldFun: (T, OrderedEvent) => T): T =
     uberpair.foldLeftRange(startSeq, endSeq)(acc0)(foldFun)
 
+
+  /**
+   * @inheritdoc
+   */
+  override def foldLeftLimit[T](startSeq: Long, limit: Int)(acc0: T)(foldFun: (T, OrderedEvent) => T): T =
+    uberpair.foldLeftLimit(startSeq, limit)(acc0)(foldFun)
+
   /**
    * Close underlying file handles or connections.  This UberStore should not be used after
    * close is called.

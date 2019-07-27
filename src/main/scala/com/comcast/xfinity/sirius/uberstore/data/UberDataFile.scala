@@ -18,7 +18,7 @@ package com.comcast.xfinity.sirius.uberstore.data
 import com.comcast.xfinity.sirius.api.impl.OrderedEvent
 import com.comcast.xfinity.sirius.uberstore.common.Fnv1aChecksummer
 
-import scala.annotation.tailrec
+import scala.collection.AbstractIterator
 
 object UberDataFile {
 
@@ -98,30 +98,58 @@ private[uberstore] class UberDataFile(dataFileName: String,
    *
    * @return T the final accumulator value
    */
-  def foldLeftRange[T](baseOff: Long, endOff: Long)(acc0: T)(foldFun: (T, Long, OrderedEvent) => T): T = {
+  def foldLeftRange[T](baseOff: Long, endOff: Long)(acc0: T)(foldFun: (T, Long, OrderedEvent) => T): T =
+    withReadHandle(dataFileName, baseOff) { readHandle =>
+      iterateEvents(readHandle, endOff)
+        .foldLeft(acc0) { case (acc, (offset, event)) => foldFun(acc, offset, event) }
+    }
+
+  def foldLeftLimit[T](baseOff: Long, limit: Int)(acc0: T)(foldFun: (T, OrderedEvent) => T): T =
+    withReadHandle(dataFileName, baseOff) { readHandle =>
+      iterateEvents(readHandle)
+        .take(limit)
+        .foldLeft(acc0) { case (acc, (_, event)) => foldFun(acc, event) }
+    }
+
+  private def withReadHandle[T](dataFileName: String, baseOff: Long)(f: UberDataFileReadHandle => T): T = {
     val readHandle = fileHandleFactory.createReadHandle(dataFileName, baseOff)
     try {
-      foldLeftUntil(readHandle, endOff, acc0, foldFun)
+      f(readHandle)
     } finally {
       readHandle.close()
     }
   }
 
-  // private low low low level fold left
-  @tailrec
-  private def foldLeftUntil[T](readHandle: UberDataFileReadHandle, maxOffset: Long, acc: T, foldFun: (T, Long, OrderedEvent) => T): T = {
-    val offset = readHandle.offset()
-    if (offset > maxOffset) {
-      acc
-    } else {
-      fileOps.readNext(readHandle) match {
-        case None => acc
-        case Some(bytes) =>
-          val accNew = foldFun(acc, offset, codec.deserialize(bytes))
-          foldLeftUntil(readHandle, maxOffset, accNew, foldFun)
+  private def iterateEvents(readHandle: UberDataFileReadHandle, maxOffset: Long = Long.MaxValue): Iterator[(Long, OrderedEvent)] =
+    new AbstractIterator[(Long, OrderedEvent)] {
+      var state: IteratorState[(Long, OrderedEvent)] = Unknown
+
+      override def hasNext: Boolean = tryAdvance() match {
+        case HasNext(_) => true
+        case _ => false
       }
+
+      override def next(): (Long, OrderedEvent) = tryAdvance() match {
+        case HasNext((offset, event)) =>
+          state = Unknown
+          (offset, event)
+        case Eof => throw new NoSuchElementException()
+      }
+
+      private def tryAdvance(): IteratorState[(Long, OrderedEvent)] =
+        state match {
+          case Unknown =>
+            val offset = readHandle.offset()
+            state = if (offset > maxOffset) {
+              Eof
+            } else fileOps.readNext(readHandle) match {
+              case Some(bytes) => HasNext((offset, codec.deserialize(bytes)))
+              case None => Eof
+            }
+            state
+          case _ => state
+        }
     }
-  }
 
   /**
    * Close open file handles.  Only touching writeHandle here, since readHandles are opened and then
@@ -137,4 +165,9 @@ private[uberstore] class UberDataFile(dataFileName: String,
   override def finalize() {
     close()
   }
+
+  private trait IteratorState[+T] {}
+  private case object Unknown extends IteratorState[Nothing]
+  private case object Eof extends IteratorState[Nothing]
+  private case class HasNext[+T](value: T) extends IteratorState[T]
 }

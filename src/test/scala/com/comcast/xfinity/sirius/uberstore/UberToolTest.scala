@@ -34,6 +34,9 @@ object UberToolTest {
     def foldLeftRange[T](start: Long, end: Long)(acc0: T)(foldFun: (T, OrderedEvent) => T): T =
       events.filter(e => start <= e.sequence && e.sequence <= end).foldLeft(acc0)(foldFun)
 
+    def foldLeftLimit[T](start: Long, limit: Int)(acc0: T)(foldFun: (T, OrderedEvent) => T): T =
+      events.filter(e => start <= e.sequence).take(limit).foldLeft(acc0)(foldFun)
+
     def getNextSeq: Long =
       throw new IllegalStateException("not implemented")
 

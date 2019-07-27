@@ -42,6 +42,19 @@ object SiriusPersistenceActor {
    */
   case class GetLogSubrange(begin: Long, end: Long) extends LogQuery
 
+  /**
+   * Message for directly requesting a specific number of events
+   * of the log from a node.
+   *
+   * SiriusPersistenceActor is expected to reply with a LogSubrange
+   * when receiving this message.  This range should contain up to the
+   * requested number of events.
+   *
+   * @param begin first sequence of the range
+   * @param limit number of events to read from the log
+   */
+  case class GetLogRange(begin: Long, limit: Int) extends LogQuery
+
   trait LogSubrange
   trait PopulatedSubrange extends LogSubrange {
     def rangeStart: Long
@@ -144,6 +157,20 @@ class SiriusPersistenceActor(stateActor: ActorRef,
         (acc, event) => event :: acc
       ).reverse
       sender ! PartialSubrange(rangeStart, lastSeq, events)
+
+    case GetLogRange(rangeStart, _) if siriusLog.getNextSeq <= rangeStart =>
+      sender ! EmptySubrange
+
+    case GetLogRange(rangeStart, limit) =>
+      val result = siriusLog.foldLeftLimit(rangeStart, limit)((0L, List[OrderedEvent]())) {
+        case ((count, list), event) => (count + 1L, event :: list)
+      }
+      val response = result match {
+        case (0, List()) => EmptySubrange
+        case (count, events) if count < limit => PartialSubrange(rangeStart, events.head.sequence, events.reverse)
+        case (_, events) => CompleteSubrange(rangeStart, events.head.sequence, events.reverse)
+      }
+      sender ! response
 
     case GetNextLogSeq =>
       sender ! siriusLog.getNextSeq

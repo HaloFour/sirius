@@ -53,6 +53,15 @@ trait SiriusLog {
   def foldLeftRange[T](startSeq: Long, endSeq: Long)(acc0: T)(foldFun: (T, OrderedEvent) => T): T
 
   /**
+   * Fold left across a specified number of log entries
+   * @param startSeq sequence number to start with, inclusive
+   * @param limit number of log entries to fold
+   * @param acc0 initial accumulator value
+   * @param foldFun function to apply to the log entry, the result being the new accumulator
+   */
+  def foldLeftLimit[T](startSeq: Long, limit: Int)(acc0: T)(foldFun: (T, OrderedEvent) => T): T
+
+  /**
    * retrieves the next sequence number to be written
    */
   def getNextSeq: Long

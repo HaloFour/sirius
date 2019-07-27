@@ -107,6 +107,13 @@ class UberPair(dataFile: UberDataFile, index: SeqIndex) {
     )
   }
 
+  def foldLeftLimit[T](startSeq: Long, limit: Int)(acc0: T)(foldFun: (T, OrderedEvent) => T): T = {
+    index.getOffsetFor(startSeq) match {
+      case Some(offset) => dataFile.foldLeftLimit(offset, limit)(acc0)(foldFun)
+      case _ => acc0
+    }
+  }
+
   /**
    * Close underlying file handles or connections.  This UberStoreFilePair should not be used after
    * close is called.

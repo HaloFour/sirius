@@ -167,6 +167,12 @@ class Segment private[uberstore](val location: File,
     )
   }
 
+  def foldLeftLimit[T](startSeq: Long, limit: Int)(acc0: T)(foldFun: (T, OrderedEvent) => T): T =
+    index.getOffsetRange(startSeq, Long.MaxValue) match {
+      case (_, -1) => acc0
+      case (offset, _) =>  dataFile.foldLeftLimit(offset, limit)(acc0)(foldFun)
+    }
+
   /**
    * Close underlying file handles or connections.  This Segment should not be used after
    * close is called.

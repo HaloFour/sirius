@@ -148,6 +148,29 @@ class SegmentedUberStore private[segmented] (base: JFile,
 
 
   /**
+   * Fold left across a specified number of log entries
+   *
+   * @param startSeq sequence number to start with, inclusive
+   * @param limit    number of log entries to fold
+   * @param acc0     initial accumulator value
+   * @param foldFun  function to apply to the log entry, the result being the new accumulator
+   */
+  override def foldLeftLimit[T](startSeq: Long, limit: Int)(acc0: T)(foldFun: (T, OrderedEvent) => T): T = {
+    @tailrec
+    def go(acc: T, limit: Int, segments: Seq[Segment]): T = segments match {
+      case segment :: remainder if limit > 0 =>
+        segment.foldLeftLimit(startSeq, limit)((0, acc)) {
+          case ((count, acc), event) => (count + 1, foldFun(acc, event))
+        } match {
+          case (count, acc) => go(acc, limit - count, remainder)
+        }
+      case _ => acc
+    }
+
+    go(acc0, limit, readOnlyDirs ::: List(liveDir))
+  }
+
+  /**
    * Close underlying file handles or connections.  This SegmentedUberStore should not be used after
    * close is called.
    */
