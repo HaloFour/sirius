@@ -103,5 +103,60 @@ class CachedSiriusLogTest extends NiceTest {
       // verify it is pushed down to backend log
       verify(mockLog).foldLeftRange(2, 3)(())(foldFun)
     }
+
+    it("should return a limited range from the write cache if possible") {
+      val mockLog = mock[SiriusLog]
+
+      val underTest = new CachedSiriusLog(mockLog, 1000)
+
+      // events in the write cache
+      val events = Seq[OrderedEvent](
+        OrderedEvent(1, 1, Delete("blah")), OrderedEvent(2, 1, Delete("blah")),
+        OrderedEvent(3, 1, Delete("blah")), OrderedEvent(4, 1, Delete("blah"))
+      )
+      events.foreach(underTest.writeEntry(_))
+
+      val foldedEvents = underTest.foldLeftLimit(2, 2)(List[OrderedEvent]())((acc, event) => acc :+ event)
+      assert(foldedEvents(0).sequence == 2L)
+      assert(foldedEvents(1).sequence == 3L)
+    }
+
+    it("should attempt to return a limited range from the on-disk log if not in the write cache") {
+      val mockLog = mock[SiriusLog]
+
+      val underTest = new CachedSiriusLog(mockLog, 2)
+
+      // events in the write cache; only 3 and 4 will remain (MAX_CACHE_SIZE == 2)
+      val events = Seq[OrderedEvent](
+        OrderedEvent(1, 1, Delete("blah")), OrderedEvent(2, 1, Delete("blah")),
+        OrderedEvent(3, 1, Delete("blah")), OrderedEvent(4, 1, Delete("blah"))
+      )
+      events.foreach(underTest.writeEntry(_))
+
+      val foldFun = (unit: Unit, event: OrderedEvent) => unit
+      underTest.foldLeftLimit(1, 2)(())(foldFun)
+
+      // verify it is pushed down to backend log
+      verify(mockLog).foldLeftLimit(1, 2)(())(foldFun)
+    }
+
+    it("should attempt to return a limited range from the write cache and from the on-disk log if not in the write cache") {
+      val mockLog = mock[SiriusLog]
+
+      val underTest = new CachedSiriusLog(mockLog, 2)
+
+      // events in the write cache; only 3 and 4 will remain (MAX_CACHE_SIZE == 2)
+      val events = Seq[OrderedEvent](
+        OrderedEvent(1, 1, Delete("blah")), OrderedEvent(2, 1, Delete("blah")),
+        OrderedEvent(3, 1, Delete("blah")), OrderedEvent(4, 1, Delete("blah"))
+      )
+      events.foreach(underTest.writeEntry(_))
+
+      val foldFun = (unit: Unit, event: OrderedEvent) => unit
+      underTest.foldLeftLimit(4, 2)(())(foldFun)
+
+      // verify it is pushed down to backend log
+      verify(mockLog).foldLeftLimit(5, 1)(())(foldFun)
+    }
   }
 }
